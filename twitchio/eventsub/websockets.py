@@ -500,7 +500,8 @@ class Websocket:
 
         if self._client:
             sockets = self._client._websockets.get(self._token_for, {})
-            sockets.pop(self.session_id or "", None)
+            if sockets.get(self.session_id or "") is self:
+                sockets.pop(self.session_id or "", None)
 
     async def close(self, cleanup: bool = True, *, reassociate: bool = True) -> None:
         if self._closed or self._closing:
