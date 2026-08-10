@@ -257,15 +257,13 @@ class Websocket:
 
         self._connecting = False
 
-    async def _resubscribe(self, attempt: int = 1) -> None:
+    async def _resubscribe(self) -> None:
         assert self._session_id
 
         # We can likely keep this unchanged:
         # In conduit transports our subscriptions will be empty anyway
         old_subs = self._subscriptions.copy()
         self._subscriptions.clear()
-
-        failed: dict[str, _SubscriptionData] = {}
 
         for identifier, sub in old_subs.items():
             sub["transport"]["session_id"] = self._session_id
@@ -274,16 +272,14 @@ class Websocket:
                 resp: SubscriptionResponse = await self._http.create_eventsub_subscription(**sub)
             except HTTPException as e:
                 if e.status == 409:
-                    # Subscription already exists on this session (e.g. a retry pass after a
-                    # partial failure). Keep tracking it so future reconnects re-create it.
+                    # This should never happen here...
+                    # But we may as well handle it in-case of edge cases instead of being noisy...
 
                     msg: str = "Disregarding. %s '%s' tried to resubscribe to subscription '%s' but failed with 409."
                     logger.debug(msg, self._log_name, self, identifier)
-                    self._subscriptions[identifier] = sub
                     continue
 
                 logger.error("Unable to resubscribe to subscription '%s' on websocket '%s': %s", identifier, self, e)
-                failed[identifier] = sub
                 continue
 
             for new in resp["data"]:
@@ -295,46 +291,6 @@ class Websocket:
 
             msg: str = "%s '%s' successfully resubscribed to subscription '%s:%s' after reconnect: %s"
             logger.debug(msg, self._log_name, self, type_, version, condition)
-
-        if not failed:
-            return
-
-        # Keep failed subscriptions tracked: if this session is already dead (e.g. Helix responds
-        # 400 "websocket transport session does not exist"), the next automatic reconnect will
-        # copy self._subscriptions and re-create them. Dropping them here would leave the client
-        # connected but permanently deaf to those events.
-        self._subscriptions.update(failed)
-
-        if attempt >= 3 or self._closing or self._closed:
-            logger.error(
-                '%s "%s" could not re-create %d subscription(s) after %d attempt(s). '
-                "They will be retried on the next reconnect.",
-                self._log_name,
-                self,
-                len(failed),
-                attempt,
-            )
-            return
-
-        delay: int = 5 * attempt
-        logger.warning(
-            '%s "%s" failed to re-create %d subscription(s), retrying in %d seconds (attempt %d/3).',
-            self._log_name,
-            self,
-            len(failed),
-            delay,
-            attempt,
-        )
-
-        async def _retry() -> None:
-            await asyncio.sleep(delay)
-            if self._closing or self._closed:
-                return
-            await self._resubscribe(attempt + 1)
-
-        task = asyncio.create_task(_retry())
-        self._connection_tasks.add(task)
-        task.add_done_callback(self._connection_tasks.discard)
 
     async def _reconnect(self, url: str) -> None:
         socket: Websocket = Websocket(
