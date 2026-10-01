@@ -412,7 +412,7 @@ class ChatMessageCheermoteData(TypedDict):
 
 
 class ChatMessageGifData(TypedDict):
-    gif_id: str
+    id: str
     url: str
 
 
