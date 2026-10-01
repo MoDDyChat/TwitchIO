@@ -61,7 +61,7 @@ the use of :class:`~twitchio.ext.commands.Context` (featureful context around th
 and more.
 
 Used with :class:`~twitchio.ext.commands.Component`'s and hot-reloading extension support you can easily manage your applications
-codebase with multiple modules and/or pacakges, with minimal down-time.
+codebase with multiple modules and/or packages, with minimal down-time.
 
 
 Why does TwitchIO use PartialUser in-place of a full User object?
